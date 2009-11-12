@@ -1,28 +1,96 @@
 package main
 
 import (
+	"bytes";
 	"flag";
 	"http";
 	"io";
 	"log";
 	"strings";
 	"template";
+	pathutil "path";
 )
 
 var addr = flag.String("addr", ":1718", "http service address") // Q=17, R=18
+
 var fmap = template.FormatterMap{
 	"html": template.HTMLFormatter,
 	"url+html": UrlHtmlFormatter,
 }
-var template_dir = "templates";
+var tmplroot = "templates";
+
+func readTemplate(name string) *template.Template {
+	path := pathutil.Join(tmplroot, name);
+	data, err := io.ReadFile(path);
+	if err != nil {
+		log.Exitf("ReadFile %s: %v", path, err)
+	}
+	t, err := template.Parse(string(data), fmap);
+	if err != nil {
+		log.Exitf("%s: %v", name, err)
+	}
+	return t;
+}
+
+var (
+	  appHTML,
+		addHTML *template.Template;
+)
+
+func readTemplates() {
+	// have to delay until after flags processing,
+	// so that main has chdir'ed to goroot.
+	appHTML = readTemplate("application.html");
+	addHTML = readTemplate("add.html");
+}
+
+/*func readTemplate(path string) *template.Template {
+  log.Stdout(template_dir + "/" + path);
+  data, err := io.ReadFile(template_dir + "/" + path);
+  if err != nil {
+    log.Exit("ReadFile:", err);
+  }
+  return template.MustParse(string(data), fmap);
+}*/
+
+func servePage(c *http.Conn, title, query string, content string) {
+	type Data struct {
+		Title		string;
+		//Timestamp	uint64;	// int64 to be compatible with os.Dir.Mtime_ns
+		Query		string;
+		Content		string;
+	}
+
+	//_, ts := fsTree.get();
+	d := Data{
+		Title: title,
+		//Timestamp: uint64(ts) * 1e9,	// timestamp in ns
+		Query: query,
+		Content: content,
+	};
+
+	if err := appHTML.Execute(&d, c); err != nil {
+		log.Stderrf("appHTML.Execute: %s", err)
+	}
+}
 
 func main() {
 	flag.Parse();
-  apptemplate := LoadTemplate("application.html");
-/*  addtemplate := LoadTemplate("add.html");*/
+  readTemplates();
 	
 	http.Handle("/", http.HandlerFunc(func(c *http.Conn, req *http.Request) {
-	  QR(c, req, apptemplate)
+	  
+	}));
+	http.Handle("/add", http.HandlerFunc(func(c *http.Conn, req *http.Request) {
+	  // Process the add template
+  	var buf bytes.Buffer;
+/*    if err := parseerrorHTML.Execute(errors, &buf); err != nil {*/
+	  err := addHTML.Execute("x", &buf);
+	  if err != nil {
+  		log.Stderrf("addHTML.Execute: %s", err)
+	  }
+  	//templ.Execute(req.FormValue("s"), c);
+  	servePage(c, "Add", "", string(buf.Bytes()));
 	}));
 	http.Handle("/css/", http.FileServer("public/css", "/css/"));
 	http.Handle("/js/", http.FileServer("public/js", "/js/"));
@@ -31,15 +99,6 @@ func main() {
 	if err != nil {
 		log.Exit("ListenAndServe:", err);
 	}
-}
-
-func LoadTemplate(path string) *template.Template {
-  log.Stdout(template_dir + "/" + path);
-  data, err := io.ReadFile(template_dir + "/" + path);
-  if err != nil {
-		log.Exit("ReadFile:", err);
-  }
-  return template.MustParse(string(data), fmap);
 }
 
 func QR(c *http.Conn, req *http.Request, templ *template.Template) {
