@@ -18,23 +18,28 @@ var template_dir = "templates";
 
 func main() {
 	flag.Parse();
-  apptemplate, err := io.ReadFile(template_dir + "/" + "application.html");
-  log.Stdout(template_dir + "/" + "application.html");
-  if err != nil {
-		log.Exit("ReadFile:", err);
-  }
-  var templ = template.MustParse(string(apptemplate), fmap);
+  apptemplate := LoadTemplate("application.html");
+/*  addtemplate := LoadTemplate("add.html");*/
 	
 	http.Handle("/", http.HandlerFunc(func(c *http.Conn, req *http.Request) {
-	  QR(c, req, templ)
+	  QR(c, req, apptemplate)
 	}));
 	http.Handle("/css/", http.FileServer("public/css", "/css/"));
 	http.Handle("/js/", http.FileServer("public/js", "/js/"));
 	
-	err = http.ListenAndServe(*addr, nil);
+	err := http.ListenAndServe(*addr, nil);
 	if err != nil {
 		log.Exit("ListenAndServe:", err);
 	}
+}
+
+func LoadTemplate(path string) *template.Template {
+  log.Stdout(template_dir + "/" + path);
+  data, err := io.ReadFile(template_dir + "/" + path);
+  if err != nil {
+		log.Exit("ReadFile:", err);
+  }
+  return template.MustParse(string(data), fmap);
 }
 
 func QR(c *http.Conn, req *http.Request, templ *template.Template) {
