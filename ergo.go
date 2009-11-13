@@ -9,18 +9,20 @@ import (
 	"strings";
 	"template";
 	pathutil "path";
+	"exec";
+	"os";
 )
 
 var addr = flag.String("addr", ":1718", "http service address") // Q=17, R=18
+var tmplroot *string
 
 var fmap = template.FormatterMap{
 	"html": template.HTMLFormatter,
 	"url+html": UrlHtmlFormatter,
 }
-var tmplroot = "templates";
 
 func readTemplate(name string) *template.Template {
-	path := pathutil.Join(tmplroot, name);
+	path := pathutil.Join(*tmplroot, name);
 	data, err := io.ReadFile(path);
 	if err != nil {
 		log.Exitf("ReadFile %s: %v", path, err)
@@ -44,15 +46,6 @@ func readTemplates() {
 	addHTML = readTemplate("add.html");
 }
 
-/*func readTemplate(path string) *template.Template {
-  log.Stdout(template_dir + "/" + path);
-  data, err := io.ReadFile(template_dir + "/" + path);
-  if err != nil {
-    log.Exit("ReadFile:", err);
-  }
-  return template.MustParse(string(data), fmap);
-}*/
-
 func servePage(c *http.Conn, title, query string, content string) {
 	type Data struct {
 		Title		string;
@@ -75,7 +68,23 @@ func servePage(c *http.Conn, title, query string, content string) {
 }
 
 func main() {
+  // Determine execuable dir
+	execpath, err := exec.LookPath(os.Args[0]);
+  if err != nil {
+    log.Exitf("Unable to determine executable path")
+  }
+  // Absolutise execpath: Seems the best way in absence of Realpath
+  if pwd, err := os.Getwd(); err == nil {
+    execpath = pathutil.Clean(pathutil.Join(pwd, execpath))
+  }
+  else {
+		log.Exitf("Getwd: %s", err)
+  }
+	execdir, _ := pathutil.Split(execpath);
+
+  tmplroot = flag.String("root", pathutil.Join(execdir, "templates"), "root directory for templates");
 	flag.Parse();
+	log.Stdoutf("Using template dir: %s", *tmplroot);
   readTemplates();
 	
 	http.Handle("/", http.HandlerFunc(func(c *http.Conn, req *http.Request) {
@@ -95,7 +104,7 @@ func main() {
 	http.Handle("/css/", http.FileServer("public/css", "/css/"));
 	http.Handle("/js/", http.FileServer("public/js", "/js/"));
 	
-	err := http.ListenAndServe(*addr, nil);
+	err = http.ListenAndServe(*addr, nil);
 	if err != nil {
 		log.Exit("ListenAndServe:", err);
 	}
